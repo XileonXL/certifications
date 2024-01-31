@@ -1,0 +1,3 @@
+[submodule "CKA/cka-study-guide"]
+	path = CKA/cka-study-guide
+	url = git@github.com:bmuschko/cka-study-guide.git
