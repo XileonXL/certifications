@@ -78,9 +78,81 @@ After creating a ServiceAccount you will find a secret of type *kubernetes.io/se
 #### Understanding RBAC API Primitives
 There are two:
 - Role --> The Role API primitive declares the API resources and their operations this rule should
-           operate on. For example, you may want to say "allow listing and deleting of pods". Any
-           operation that is not spelled out explictly is disallowed as soon as it is bound to the
-           subject.
+operate on. For example, you may want to say "allow listing and deleting of pods". Any operation 
+that is not spelled out explictly is disallowed as soon as it is bound to the subject.
 - RoleBinding --> Binds the role object to the subject
 
 <center><img src="images/rbac-primitives.png" alt="RBAC Primitives" width="400"/></center>
+
+#### Default User-Facing Roles
+Kubernetes defines a set of default roles. You can assign them to a subject via a RoleBinding
+or define your own:
+- cluster-admin (read-write to all resources in all namespaces)
+- admin (read and write to all resources in namespace including roles and rolebindings)
+- edit (read and write access to resources in namespace except roles and rolebindings. Also
+provides access to secrets)
+- view (read-only access to resources in namespace except roles, rolebindings and secrets)
+
+For creating new roles and rolebindings you will have to use a context that allows for creating
+or modifying them, that is, cluster-admin or admin.
+
+#### Creating Roles and RoleBindings
+The following commands will create a role and rolebinding for the *default* namespace.
+```
+kubectl create role read-only --verb=list,get,watch --resource=pods,deployments,services
+kubectl create rolebinding read-only-binding --role=read-only --user=johndoe
+```
+
+**Bonus**: At any given time, you can check a user's permissions with `kubectl auth can-i --list
+--as johndoe`
+
+**Bonus 2**: We can agregate rules from clusterroles (not for roles apparently) to mix different
+clusterroles. The following code shows the differences:
+```
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+    name: list-pods
+    namespace: rbac-example
+    labels:
+        rbac-pod-list: "true"
+rules:
+- apiGroups:
+    - ""
+    resources:
+    - pods
+    verbs:
+    - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+    name: delete-services
+    namespace: rbac-example
+    labels:
+        rbac-service-delete: "true"
+rules:
+- apiGroups:
+    - ""
+    resources:
+    - services
+    verbs:
+    - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+    name: pods-services-aggregation-rules
+    namespace: rbac-example
+    aggregationRule:
+        clusterRoleSelectors:
+        - matchLabels
+            rbac-pod-list: "true"
+        - matchLabels
+            rbac-service-delete: "true"
+rules: []
+```
+
+Take care specifying *rules* in clusterrolebinding, because they will overwrite the clusterrole rules.
+
+### Creating and Managing a Kubernetes Cluster
