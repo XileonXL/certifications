@@ -156,3 +156,13 @@ rules: []
 Take care specifying *rules* in clusterrolebinding, because they will overwrite the clusterrole rules.
 
 ### Creating and Managing a Kubernetes Cluster
+
+**Note**: This section will be managed using the environment created using
+Vagrant related to this [Github Repository](https://github.com/emmaliaocode/vagrant-vmware-arm.git)
+
+
+The low-level command-line tool for performing cluster bootstrapping operations
+is called *kubeadm*. It is not meant for provisioning the underlying infrastructure
+(that's the purpose of infrastructure automation tools like Ansible or Terraform).
+
+<center><img src="images/installing-k8s-cluster-kubeadm.png" alt="Installing K8s Cluster with Kubeadm" width="500"/></center>

@@ -1,3 +1,6 @@
 [submodule "CKA/cka-study-guide"]
 	path = CKA/cka-study-guide
 	url = git@github.com:bmuschko/cka-study-guide.git
+[submodule "CKA/vagrant-vmware-arm"]
+	path = CKA/vagrant-vmware-arm
+	url = https://github.com/emmaliaocode/vagrant-vmware-arm.git
