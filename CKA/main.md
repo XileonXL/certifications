@@ -166,3 +166,141 @@ is called *kubeadm*. It is not meant for provisioning the underlying infrastruct
 (that's the purpose of infrastructure automation tools like Ansible or Terraform).
 
 <center><img src="images/installing-k8s-cluster-kubeadm.png" alt="Installing K8s Cluster with Kubeadm" width="500"/></center>
+
+#### Initializing the Control Plane Node
+
+Start by initializaing the control plane on the control plane node. It is the machine responsible 
+for hosting  the API server, etcd, and other components important to managing the K8s cluster.
+
+Initialize the control plane using the `kubeadm init` command. You will need to add the following 
+two command-line options: provide the IP addresses for the Pod network with the option 
+`--pod-network-cidr`. With the option `--apiserver-advertise-address`, you can declare the IP 
+address the API server will advertise to listen on.
+
+Example:
+    `sudo kubeadm init --pod-network-cidr 172.18.0.0/16 --apiserver-advertise-address 10.8.8.10`
+
+##### Error related to IPv4
+```
+[ERROR FileContent--proc-sys-net-bridge-bridge-nf-call-iptables]: /proc/sys/net/bridge/bridge-nf-call-iptables does not exist
+[ERROR FileContent--proc-sys-net-ipv4-ip_forward]: /proc/sys/net/ipv4/ip_forward contents are not set to 1
+```
+
+**Solution**:
+From [here](https://v1-28.docs.kubernetes.io/docs/setup/production-environment/container-runtimes/)
+```
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+# sysctl params required by setup, params persist across reboots
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
+# Apply sysctl params without reboot
+sudo sysctl --system
+```
+
+Verify that `br_netfilter` and `overlay` modules are loaded by running the following commands:
+```
+lsmod | grep br_netfilter
+lsmod | grep overlay
+```
+
+##### Error related to CRI
+```
+[ERROR CRI]: container runtime is not running: output: time="2024-02-28T10:45:09Z" level=fatal msg="validate service connection: validate CRI v1 runtime API for endpoint \"unix:///var/run/containerd/containerd.sock\": rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial unix /var/run/containerd/containerd.sock: connect: no such file or directory\""
+, error: exit status 1
+```
+
+**Solution**:
+This happens because no *Container Runtime Interface (CRI)* is installed in the node. By default it
+tries to use containerd (packed by Docker), but we could use CRI-O (packed by RedHat). Here is
+[examples](https://www.tutorialworks.com/difference-docker-containerd-runc-crio-oci/)
+
+Install containerd with the [following instructions](https://www.howtoforge.com/how-to-install-containerd-container-runtime-on-ubuntu-22-04/):
+
+There are two options, manually and using APT Docker repository:
+
+**Option 1**:
+```
+wget https://github.com/containerd/containerd/releases/download/v1.6.8/containerd-1.6.8-linux-amd64.tar.gz
+sudo tar Cxzvf /usr/local containerd-1.6.8-linux-amd64.tar.gz
+
+wget https://github.com/opencontainers/runc/releases/download/v1.1.3/runc.amd64
+sudo install -m 755 runc.amd64 /usr/local/sbin/runc
+
+which runc
+
+wget https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-amd64-v1.1.1.tgz
+
+mkdir -p /opt/cni/bin
+sudo tar Cxzvf /opt/cni/bin cni-plugins-linux-amd64-v1.1.1.tgz
+
+sudo mkdir -p /etc/containerd/
+containerd config default | sudo tee /etc/containerd/config.toml
+
+sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
+
+sudo curl -L https://raw.githubusercontent.com/containerd/containerd/main/containerd.service -o /etc/systemd/system/containerd.service
+
+sudo systemctl start containerd
+
+sudo systemctl daemon-reload
+sudo systemctl enable containerd
+```
+
+**Option 2** (Used this --> not working):
+```
+sudo apt install \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt update
+sudo apt install -y containerd.io
+
+sudo systemctl start containerd
+sudo systemctl enable containerd
+
+sudo mv etc/containerd/config.toml etc/containerd/config.toml.orig
+containerd config default | sudo tee /etc/containerd/config.toml
+
+sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
+
+wget https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-amd64-v1.1.1.tgz
+
+sudo mkdir -p /opt/cni/bin
+sudo tar Cxzvf /opt/cni/bin cni-plugins-linux-amd64-v1.1.1.tgz
+
+sudo systemctl restart containerd
+```
+
+##### Start using cluster
+After that, to start using your cluster, you need to run the following as a regular user:
+    ```
+        mkdir -p $HOME/.kube
+        sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+        sudo chwon $(id -u):$(id -g) $HOME/.kube/config
+    ```
+
+After that, deploy a pod network to the cluster with `kubectl apply -f podnetwork.yaml` with one
+of the options listed at [K8s Addons](https://kubernetes.io/docs/concepts/cluster-administration/addons/)
+
+Then you can join any number of worker nodes by running the following on each as root:
+    `kubeadm join 10.8.8.10:6443 --token `
