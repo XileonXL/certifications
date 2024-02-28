@@ -172,6 +172,8 @@ is called *kubeadm*. It is not meant for provisioning the underlying infrastruct
 Start by initializaing the control plane on the control plane node. It is the machine responsible 
 for hosting  the API server, etcd, and other components important to managing the K8s cluster.
 
+First of all, disable **swap** with `sudo swapoff -a`
+
 Initialize the control plane using the `kubeadm init` command. You will need to add the following 
 two command-line options: provide the IP addresses for the Pod network with the option 
 `--pod-network-cidr`. With the option `--apiserver-advertise-address`, you can declare the IP 
@@ -179,6 +181,20 @@ address the API server will advertise to listen on.
 
 Example:
     `sudo kubeadm init --pod-network-cidr 172.18.0.0/16 --apiserver-advertise-address 10.8.8.10`
+
+##### Installing kubeadm
+```
+sudo apt update
+sudo apt install -y apt-transport-https ca-certificates curl gpg
+
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+sudo apt-get update
+sudo apt-get install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl
+```
 
 ##### Error related to IPv4
 ```
@@ -229,7 +245,7 @@ Install containerd with the [following instructions](https://www.howtoforge.com/
 
 There are two options, manually and using APT Docker repository:
 
-**Option 1**:
+**Option 1** (Used this):
 ```
 wget https://github.com/containerd/containerd/releases/download/v1.6.8/containerd-1.6.8-linux-amd64.tar.gz
 sudo tar Cxzvf /usr/local containerd-1.6.8-linux-amd64.tar.gz
@@ -257,7 +273,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable containerd
 ```
 
-**Option 2** (Used this --> not working):
+**Option 2**:
 ```
 sudo apt install \
     ca-certificates \
